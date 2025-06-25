@@ -85,7 +85,6 @@ func main() {
 	defer listener.Close()
 
 	fmt.Println("Server started on :8080")
-
 	go server.handleMessage()
 
 	for {
@@ -94,7 +93,6 @@ func main() {
 			fmt.Println("Error of connection: ", err)
 			continue
 		}
-		_, _ = conn.Write([]byte("Enter your name: "))
 		name, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
 			conn.Close()
@@ -108,4 +106,5 @@ func main() {
 		server.register <- client
 		go server.handleClient(client)
 	}
+
 }
