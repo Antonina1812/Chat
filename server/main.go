@@ -46,7 +46,6 @@ func main() {
 			continue
 		}
 
-		_, _ = conn.Write([]byte("Enter your name: "))
 		name, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
 			conn.Close()
@@ -77,16 +76,55 @@ func (cs *ChatServer) handleClient(client Client) {
 		message = strings.TrimSpace(message)
 
 		// Обработка команд
-		switch message {
-		case "/exit":
+		switch {
+		case message == "/exit":
 			cs.unregister <- client.Conn
 			cs.broadcast <- fmt.Sprintf("%s left the chat", client.Name)
 			return
-		case "/list":
+		case message == "/list":
 			cs.sendClientList(client.Conn)
 			continue
+		case strings.HasPrefix(message, "/msg"):
+			parts := strings.SplitN(message, " ", 3)
+			if len(parts) < 3 {
+				client.Conn.Write([]byte("Usage: /msg <name> <message>"))
+				continue
+			}
+
+			recipientName := parts[1]
+			privateMessage := parts[2]
+			cs.privateChat(client.Name, recipientName, privateMessage)
 		default:
 			cs.broadcast <- fmt.Sprintf("%s: %s", client.Name, message)
+		}
+	}
+}
+
+func (cs *ChatServer) privateChat(senderName, recipientName, privateMessage string) {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
+
+	found := false
+
+	for _, client := range cs.clients {
+		if client.Name == recipientName {
+			if _, err := client.Conn.Write([]byte(fmt.Sprintf("Private message from %s: %s\n", senderName, privateMessage))); err != nil {
+				client.Conn.Close()
+				delete(cs.clients, client.Conn)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		for _, client := range cs.clients {
+			if client.Name == senderName {
+				if _, err := client.Conn.Write([]byte("User not found\n")); err != nil {
+					client.Conn.Close()
+					delete(cs.clients, client.Conn)
+				}
+				break
+			}
 		}
 	}
 }
