@@ -14,8 +14,9 @@ import (
 )
 
 type Client struct {
-	Conn net.Conn
-	Name string
+	Conn     net.Conn
+	Name     string
+	Password string
 }
 
 type ChatServer struct {
@@ -66,14 +67,31 @@ func main() {
 			continue
 		}
 
+		conn.Write([]byte("Enter your name: \n"))
+
 		name, err := bufio.NewReader(conn).ReadString('\n')
 		if err != nil {
 			conn.Close()
 			continue
 		}
 
+		conn.Write([]byte("Enter your password: \n"))
+
+		password, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			conn.Close()
+			continue
+		}
+
 		name = strings.TrimSpace(name)
-		client := Client{Conn: conn, Name: name}
+		client := Client{
+			Conn:     conn,
+			Name:     name,
+			Password: password,
+		}
+
+		database.AddUser(conn, db, name, password)
+
 		server.register <- client
 		go server.handleClient(client)
 	}
