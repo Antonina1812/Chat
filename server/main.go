@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -104,11 +105,11 @@ func (cs *ChatServer) handleClient(client Client) {
 	cs.broadcast <- fmt.Sprintf("%s joined", client.Name)
 	reader := bufio.NewReader(client.Conn)
 
-	chatHistoryFile := fmt.Sprintf("%s.txt", client.Name)
+	chatHistoryFile := fmt.Sprintf("storage/%s.txt", client.Name)
 
 	file, err := os.OpenFile(chatHistoryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("Ошибка при открытии файла: %v\n", err)
+		fmt.Printf("Error of writing to file: %v\n", err)
 		return
 	}
 	defer file.Close()
@@ -122,6 +123,7 @@ func (cs *ChatServer) handleClient(client Client) {
 		}
 
 		message = strings.TrimSpace(message)
+		time := time.Now().Format("2006-01-02 15:04:05")
 
 		switch {
 		case message == "/exit":
@@ -129,7 +131,7 @@ func (cs *ChatServer) handleClient(client Client) {
 			cs.broadcast <- fmt.Sprintf("%s left the chat", client.Name)
 
 			if _, err := file.WriteString(message + "\n"); err != nil {
-				fmt.Printf("Ошибка при записи в файл: %v\n", err)
+				fmt.Printf("Error of writing to file: %v\n", err)
 				continue
 			}
 
@@ -158,7 +160,7 @@ func (cs *ChatServer) handleClient(client Client) {
 				continue
 			}
 		default:
-			cs.broadcast <- fmt.Sprintf("%s: %s", client.Name, message)
+			cs.broadcast <- fmt.Sprintf("%s %s: %s", time, client.Name, message)
 
 			if _, err := file.WriteString(message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
