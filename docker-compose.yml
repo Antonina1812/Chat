@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  server:
+    build: ./server
+    container_name: chat_server
+    cap_add:
+    - SYS_ADMIN
+    privileged: true
+
+  client1:
+    build: ./client
+    container_name: chat_client1
+    privileged: true
+    depends_on:
+      - server
+
+  client2:
+    build: ./client
+    container_name: chat_client2
+    privileged: true
+    depends_on:
+      - server
+  
+  client3:
+    build: ./client
+    container_name: chat_client3
+    privileged: true
+    depends_on:
+      - server

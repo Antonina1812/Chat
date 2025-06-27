@@ -2,10 +2,15 @@ package main
 
 import (
 	"bufio"
+	"chat/database"
+	"database/sql"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"sync"
+
+	_ "github.com/lib/pq"
 )
 
 type Client struct {
@@ -29,7 +34,7 @@ func main() {
 		unregister: make(chan net.Conn),
 	}
 
-	listener, err := net.Listen("tcp", ":8080")
+	listener, err := net.Listen("tcp", ":8080") // старт работы сервера на порту 8080
 	if err != nil {
 		fmt.Println("Error of server starting:", err)
 		return
@@ -37,6 +42,21 @@ func main() {
 	defer listener.Close()
 
 	fmt.Println("Server started on :8080")
+
+	connDb := "user=antoninabychkova dbname=chat host=localhost sslmode=disable" // подключение к базе данных
+	db, err := sql.Open("postgres", connDb)
+	if err != nil {
+		server.broadcast <- fmt.Sprintln("db connection error")
+	}
+	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("db was successfuly connected")
+	database.CreateTables(db)
+
 	go server.handleMessages()
 
 	for {
