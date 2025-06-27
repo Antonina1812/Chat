@@ -5,35 +5,39 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
 	conn, err := net.Dial("tcp", "localhost:8080")
 	if err != nil {
-		fmt.Println("connection error", err)
+		fmt.Println("Connection error: ", err)
 		return
 	}
 	defer conn.Close()
 
-	go readMessages(conn)
+	go func() {
+		scanner := bufio.NewScanner(conn)
+		for scanner.Scan() {
+			msg := scanner.Text()
+			if strings.HasPrefix(msg, "===") {
+				fmt.Println("\n" + msg)
+			} else {
+				fmt.Println(msg)
+			}
+		}
+	}()
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		message := scanner.Text()
-		_, err := fmt.Fprintln(conn, message)
+		text := scanner.Text()
+		_, err := fmt.Fprintln(conn, text)
 		if err != nil {
-			fmt.Println("sending error", err)
+			fmt.Println("Error of sending: ", err)
 			return
 		}
-		if message == "exit" {
+		if text == "/exit" {
 			return
 		}
-	}
-}
-
-func readMessages(conn net.Conn) {
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		fmt.Println(scanner.Text())
 	}
 }
