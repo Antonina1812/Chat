@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 
@@ -101,8 +102,17 @@ func (cs *ChatServer) handleClient(client Client) {
 	defer client.Conn.Close()
 
 	cs.broadcast <- fmt.Sprintf("%s joined", client.Name)
-
 	reader := bufio.NewReader(client.Conn)
+
+	chatHistoryFile := fmt.Sprintf("%s.txt", client.Name)
+
+	file, err := os.OpenFile(chatHistoryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Ошибка при открытии файла: %v\n", err)
+		return
+	}
+	defer file.Close()
+
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
@@ -113,14 +123,25 @@ func (cs *ChatServer) handleClient(client Client) {
 
 		message = strings.TrimSpace(message)
 
-		// Обработка команд
 		switch {
 		case message == "/exit":
 			cs.unregister <- client.Conn
 			cs.broadcast <- fmt.Sprintf("%s left the chat", client.Name)
+
+			if _, err := file.WriteString(message + "\n"); err != nil {
+				fmt.Printf("Ошибка при записи в файл: %v\n", err)
+				continue
+			}
+
 			return
 		case message == "/list":
 			cs.sendClientList(client.Conn)
+
+			if _, err := file.WriteString(message + "\n"); err != nil {
+				fmt.Printf("Error of writing to file: %v\n", err)
+				continue
+			}
+
 			continue
 		case strings.HasPrefix(message, "/msg"):
 			parts := strings.SplitN(message, " ", 3)
@@ -128,12 +149,21 @@ func (cs *ChatServer) handleClient(client Client) {
 				client.Conn.Write([]byte("Usage: /msg <name> <message>"))
 				continue
 			}
-
 			recipientName := parts[1]
 			privateMessage := parts[2]
 			cs.privateChat(client.Name, recipientName, privateMessage)
+
+			if _, err := file.WriteString(message + "\n"); err != nil {
+				fmt.Printf("Error of writing to file: %v\n", err)
+				continue
+			}
 		default:
 			cs.broadcast <- fmt.Sprintf("%s: %s", client.Name, message)
+
+			if _, err := file.WriteString(message + "\n"); err != nil {
+				fmt.Printf("Error of writing to file: %v\n", err)
+				continue
+			}
 		}
 	}
 }

@@ -30,7 +30,7 @@ func AddUser(conn net.Conn, db *sql.DB, name, password string) {
 		return
 	}
 
-	_, err = db.Exec("INSERT INTO users (name, password) VALUES ($1, $2)", name, password)
+	_, err = db.Exec("INSERT INTO users (name, password, message_count) VALUES ($1, $2)", name, password)
 	if err != nil {
 		log.Fatal(err)
 	}
