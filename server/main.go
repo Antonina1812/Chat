@@ -73,7 +73,7 @@ func main() {
 		client := server.handleIncomingData(conn, db)
 
 		server.register <- client
-		go server.handleClient(client)
+		go server.handleClient(db, client)
 	}
 }
 
@@ -128,7 +128,7 @@ func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) Client {
 	return client
 }
 
-func (cs *ChatServer) handleClient(client Client) {
+func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
 	defer client.Conn.Close()
 
 	cs.broadcast <- fmt.Sprintf("%s joined", client.Name)
@@ -177,12 +177,33 @@ func (cs *ChatServer) handleClient(client Client) {
 		case strings.HasPrefix(message, "/msg"):
 			parts := strings.SplitN(message, " ", 3)
 			if len(parts) < 3 {
-				client.Conn.Write([]byte("Usage: /msg <name> <message>"))
+				client.Conn.Write([]byte("Usage: /msg <name> <message>\n"))
 				continue
 			}
 			recipientName := parts[1]
 			privateMessage := parts[2]
 			cs.privateChat(client.Name, recipientName, privateMessage)
+
+			if _, err := file.WriteString(message + "\n"); err != nil {
+				fmt.Printf("Error of writing to file: %v\n", err)
+				continue
+			}
+		case strings.HasPrefix(message, "/kick"):
+			parts := strings.Split(message, " ")
+			if len(parts) < 2 {
+				client.Conn.Write([]byte("Usage: /kick <name>\n"))
+				continue
+			}
+
+			username := parts[1]
+			database.DeleteUser(client.Conn, db, username)
+
+			// if client.Role == "guest" {
+			// 	client.Conn.Write([]byte("You don't have enough rights\n"))
+			// 	continue
+			// } else if client.Role == "admin" {
+			// 	database.DeleteUser(client.Conn, db, username)
+			// }
 
 			if _, err := file.WriteString(message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)

@@ -38,3 +38,22 @@ func AddUser(conn net.Conn, db *sql.DB, name, password, role string) {
 
 	conn.Write([]byte("User sign up successfully\n"))
 }
+
+func DeleteUser(conn net.Conn, db *sql.DB, name string) {
+	result, err := db.Exec(`DELETE FROM users WHERE name = $1`, name)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Fatal()
+	}
+
+	if rowsAffected > 0 { // проверяем сколько строчек было затронуто
+		conn.Write([]byte("User is deleted\n"))
+	} else {
+		conn.Write([]byte("User was not found\n"))
+	}
+}
