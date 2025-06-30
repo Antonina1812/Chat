@@ -98,23 +98,10 @@ func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) Client {
 	conn.Write([]byte("Enter your role (admin or guest): \n"))
 
 	role, err := bufio.NewReader(conn).ReadString('\n')
-	// if role != "admin" && role != "quest" {
-	// 	conn.Write([]byte("Such role doesn't exist\n"))
-	// 	for {
-	// 		newRole, err := bufio.NewReader(conn).ReadString('\n')
-	// 		if err != nil {
-	// 			conn.Close()
-	// 		}
-
-	// 		if newRole == "admin" || newRole == "quest" {
-	// 			role = newRole
-	// 			break
-	// 		}
-	// 	}
-	// }
 	if err != nil {
 		conn.Close()
 	}
+	role = cs.setRole(conn, role)
 
 	name = strings.TrimSpace(name)
 	client := Client{
@@ -126,6 +113,28 @@ func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) Client {
 
 	database.AddUser(conn, db, name, password, role)
 	return client
+}
+
+func (cs *ChatServer) setRole(conn net.Conn, role string) string {
+	if role != "admin" && role != "quest" {
+		conn.Write([]byte("Such role doesn't exist, try again\n"))
+		for {
+			newRole, err := bufio.NewReader(conn).ReadString('\n')
+			if err != nil {
+				conn.Close()
+			}
+
+			newRole = strings.TrimSpace(newRole)
+
+			if newRole == "admin" || newRole == "guest" {
+				role = newRole
+				return role
+			} else {
+				conn.Write([]byte("Such role doesn't exist\n"))
+			}
+		}
+	}
+	return role
 }
 
 func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
