@@ -1,4 +1,0 @@
-/kick r
-
-/kick li
-

@@ -7,11 +7,21 @@ import (
 )
 
 func CreateTables(db *sql.DB) {
-	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS users (
+	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS roles (
+		id SERIAL PRIMARY KEY,
+		role VARCHAR(100) NOT NULL
+		)`)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     password VARCHAR(100) NOT NULL,
-	role VARCHAR(100) NOT NULL
+	role_id INTEGER NOT NULL,
+	FOREIGN KEY (role_id) REFERENCES roles(id)
 	)`)
 	if err != nil {
 		log.Fatal(err)
@@ -31,7 +41,14 @@ func AddUser(conn net.Conn, db *sql.DB, name, password, role string) {
 		return
 	}
 
-	_, err = db.Exec("INSERT INTO users (name, password, role) VALUES ($1, $2, $3)", name, password, role)
+	var role_id int
+	err = db.QueryRow("SELECT id FROM roles WHERE role = $1", role).Scan(&role_id)
+	if err != nil {
+		conn.Write([]byte("Error: role not found in database\n"))
+		return
+	}
+
+	_, err = db.Exec("INSERT INTO users (name, password, role_id) VALUES ($1, $2, $3)", name, password, role_id)
 	if err != nil {
 		log.Fatal(err)
 	}
