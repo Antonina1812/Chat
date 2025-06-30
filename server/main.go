@@ -19,6 +19,7 @@ type Client struct {
 	Conn     net.Conn
 	Name     string
 	Password string
+	Role     string
 }
 
 type ChatServer struct {
@@ -69,34 +70,62 @@ func main() {
 			continue
 		}
 
-		conn.Write([]byte("Enter your name: \n"))
-
-		name, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			conn.Close()
-			continue
-		}
-
-		conn.Write([]byte("Enter your password: \n"))
-
-		password, err := bufio.NewReader(conn).ReadString('\n')
-		if err != nil {
-			conn.Close()
-			continue
-		}
-
-		name = strings.TrimSpace(name)
-		client := Client{
-			Conn:     conn,
-			Name:     name,
-			Password: password,
-		}
-
-		database.AddUser(conn, db, name, password)
+		client := server.handleIncomingData(conn, db)
 
 		server.register <- client
 		go server.handleClient(client)
 	}
+}
+
+func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) Client {
+	cs.mutex.Lock()
+	defer cs.mutex.Unlock()
+
+	conn.Write([]byte("Enter your name: \n"))
+
+	name, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		conn.Close()
+	}
+
+	conn.Write([]byte("Enter your password: \n"))
+
+	password, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil {
+		conn.Close()
+	}
+
+	conn.Write([]byte("Enter your role (admin or guest): \n"))
+
+	role, err := bufio.NewReader(conn).ReadString('\n')
+	// if role != "admin" && role != "quest" {
+	// 	conn.Write([]byte("Such role doesn't exist\n"))
+	// 	for {
+	// 		newRole, err := bufio.NewReader(conn).ReadString('\n')
+	// 		if err != nil {
+	// 			conn.Close()
+	// 		}
+
+	// 		if newRole == "admin" || newRole == "quest" {
+	// 			role = newRole
+	// 			break
+	// 		}
+	// 	}
+	// }
+	if err != nil {
+		conn.Close()
+	}
+
+	name = strings.TrimSpace(name)
+	client := Client{
+		Conn:     conn,
+		Name:     name,
+		Password: password,
+		Role:     role,
+	}
+
+	database.AddUser(conn, db, name, password, role)
+	return client
 }
 
 func (cs *ChatServer) handleClient(client Client) {
