@@ -200,20 +200,26 @@ func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.
 			}
 
 			username := parts[1]
-			database.DeleteUser(client.Conn, db, username)
-			for _, client := range cs.clients {
-				if username == client.Name {
-					client.Conn.Close()
-					return
+			// database.DeleteUser(client.Conn, db, username)
+			// for _, client := range cs.clients {
+			// 	if username == client.Name {
+			// 		client.Conn.Close()
+			// 		return
+			// 	}
+			// }
+
+			if client.Role == "guest" {
+				client.Conn.Write([]byte("You don't have enough rights\n"))
+				continue
+			} else if client.Role == "admin" {
+				database.DeleteUser(client.Conn, db, username)
+				for _, client := range cs.clients {
+					if username == client.Name {
+						client.Conn.Close()
+						return
+					}
 				}
 			}
-
-			// if client.Role == "guest" {
-			// 	client.Conn.Write([]byte("You don't have enough rights\n"))
-			// 	continue
-			// } else if client.Role == "admin" {
-			// 	database.DeleteUser(client.Conn, db, username)
-			// }
 
 			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
