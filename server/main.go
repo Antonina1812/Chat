@@ -91,12 +91,7 @@ func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) s.Client {
 	}
 
 	conn.Write([]byte("Enter your role (admin or guest): \n"))
-
-	role, err := bufio.NewReader(conn).ReadString('\n')
-	if err != nil {
-		conn.Close()
-	}
-	role = cs.setRole(conn, role)
+	role := cs.setRole(conn)
 
 	name = strings.TrimSpace(name)
 	client := s.Client{
@@ -110,26 +105,23 @@ func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) s.Client {
 	return client
 }
 
-func (cs *ChatServer) setRole(conn net.Conn, role string) string {
-	if role != "admin" && role != "quest" {
-		conn.Write([]byte("Such role doesn't exist, try again\n"))
-		for {
-			newRole, err := bufio.NewReader(conn).ReadString('\n')
-			if err != nil {
-				conn.Close()
-			}
+func (cs *ChatServer) setRole(conn net.Conn) string {
+	for {
+		newRole, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			conn.Close()
+		}
 
-			newRole = strings.TrimSpace(newRole)
+		newRole = strings.TrimSpace(newRole)
 
-			if newRole == "admin" || newRole == "guest" {
-				role = newRole
-				return role
-			} else {
-				conn.Write([]byte("Such role doesn't exist\n"))
-			}
+		if newRole == "admin" || newRole == "guest" {
+			role := newRole
+			return role
+		} else {
+			conn.Write([]byte("Such role doesn't exist\n"))
+			continue
 		}
 	}
-	return role
 }
 
 func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.Client) {
@@ -163,21 +155,15 @@ func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.
 			cs.unregister <- client.Conn
 			cs.broadcast <- fmt.Sprintf("%s left the chat", client.Name)
 
-			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
-				fmt.Printf("Error of writing to file: %v\n", err)
-				continue
-			}
-
+			cs.writeToFile(file, time, client.Name, message)
 			return
+
 		case message == "/list":
 			cs.sendClientList(db, client.Conn, clientsList)
 
-			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
-				fmt.Printf("Error of writing to file: %v\n", err)
-				continue
-			}
-
+			cs.writeToFile(file, time, client.Name, message)
 			continue
+
 		case strings.HasPrefix(message, "/msg"):
 			parts := strings.SplitN(message, " ", 3)
 			if len(parts) < 3 {
@@ -188,10 +174,9 @@ func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.
 			privateMessage := parts[2]
 			cs.privateChat(client.Name, recipientName, privateMessage)
 
-			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
-				fmt.Printf("Error of writing to file: %v\n", err)
-				continue
-			}
+			cs.writeToFile(file, time, client.Name, message)
+			continue
+
 		case strings.HasPrefix(message, "/kick"):
 			parts := strings.Split(message, " ")
 			if len(parts) < 2 {
@@ -200,13 +185,6 @@ func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.
 			}
 
 			username := parts[1]
-			// database.DeleteUser(client.Conn, db, username)
-			// for _, client := range cs.clients {
-			// 	if username == client.Name {
-			// 		client.Conn.Close()
-			// 		return
-			// 	}
-			// }
 
 			if client.Role == "guest" {
 				client.Conn.Write([]byte("You don't have enough rights\n"))
@@ -220,19 +198,20 @@ func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.
 					}
 				}
 			}
+			cs.writeToFile(file, time, client.Name, message)
+			continue
 
-			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
-				fmt.Printf("Error of writing to file: %v\n", err)
-				continue
-			}
 		default:
 			cs.broadcast <- fmt.Sprintf("%s %s: %s", time, client.Name, message)
-
-			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
-				fmt.Printf("Error of writing to file: %v\n", err)
-				continue
-			}
+			cs.writeToFile(file, time, client.Name, message)
+			continue
 		}
+	}
+}
+
+func (cs *ChatServer) writeToFile(file *os.File, time, name, message string) {
+	if _, err := file.WriteString(time + " " + name + ": " + message + "\n"); err != nil {
+		fmt.Printf("Error of writing to file: %v\n", err)
 	}
 }
 
