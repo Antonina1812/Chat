@@ -1,6 +1,7 @@
 package database
 
 import (
+	s "chat/structures"
 	"database/sql"
 	"log"
 	"net"
@@ -73,4 +74,47 @@ func DeleteUser(conn net.Conn, db *sql.DB, name string) {
 	} else {
 		conn.Write([]byte("User was not found\n"))
 	}
+}
+
+func GetUsersList(db *sql.DB, conn net.Conn, client s.Client) []s.Client {
+	rows, err := db.Query(`
+	SELECT users.name, roles.role
+	FROM users
+	JOIN roles
+	ON users.role_id = roles.id
+	ORDER BY users.id`)
+	if err != nil {
+		log.Fatal(err)
+		conn.Close()
+		return nil
+	}
+
+	defer rows.Close()
+
+	var clients []s.Client
+	for rows.Next() {
+		var client s.Client
+		err = rows.Scan(&client.Name, &client.Role)
+		if err != nil {
+			conn.Close()
+			return nil
+		}
+		clients = append(clients, client)
+	}
+	if err = rows.Err(); err != nil {
+		conn.Close()
+		return nil
+	}
+
+	return clients
+}
+
+func UsersCount(db *sql.DB) int {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	if err != nil {
+		log.Fatal(err)
+		return 0
+	}
+	return count
 }

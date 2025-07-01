@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"chat/database"
+	s "chat/structures"
 	"database/sql"
 	"fmt"
 	"log"
@@ -15,26 +16,19 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type Client struct {
-	Conn     net.Conn
-	Name     string
-	Password string
-	Role     string
-}
-
 type ChatServer struct {
-	clients    map[net.Conn]Client
+	clients    map[net.Conn]s.Client
 	broadcast  chan string
-	register   chan Client
+	register   chan s.Client
 	unregister chan net.Conn
 	mutex      sync.Mutex
 }
 
 func main() {
 	server := ChatServer{
-		clients:    make(map[net.Conn]Client),
+		clients:    make(map[net.Conn]s.Client),
 		broadcast:  make(chan string),
-		register:   make(chan Client),
+		register:   make(chan s.Client),
 		unregister: make(chan net.Conn),
 	}
 
@@ -71,13 +65,14 @@ func main() {
 		}
 
 		client := server.handleIncomingData(conn, db)
+		clientsList := database.GetUsersList(db, conn, client)
 
 		server.register <- client
-		go server.handleClient(db, client)
+		go server.handleClient(db, client, clientsList)
 	}
 }
 
-func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) Client {
+func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) s.Client {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 
@@ -104,7 +99,7 @@ func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) Client {
 	role = cs.setRole(conn, role)
 
 	name = strings.TrimSpace(name)
-	client := Client{
+	client := s.Client{
 		Conn:     conn,
 		Name:     name,
 		Password: password,
@@ -137,7 +132,7 @@ func (cs *ChatServer) setRole(conn net.Conn, role string) string {
 	return role
 }
 
-func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
+func (cs *ChatServer) handleClient(db *sql.DB, client s.Client, clientsList []s.Client) {
 	defer client.Conn.Close()
 
 	cs.broadcast <- fmt.Sprintf("%s joined", client.Name)
@@ -168,16 +163,16 @@ func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
 			cs.unregister <- client.Conn
 			cs.broadcast <- fmt.Sprintf("%s left the chat", client.Name)
 
-			if _, err := file.WriteString(message + "\n"); err != nil {
+			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
 				continue
 			}
 
 			return
 		case message == "/list":
-			cs.sendClientList(client.Conn)
+			cs.sendClientList(db, client.Conn, clientsList)
 
-			if _, err := file.WriteString(message + "\n"); err != nil {
+			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
 				continue
 			}
@@ -193,7 +188,7 @@ func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
 			privateMessage := parts[2]
 			cs.privateChat(client.Name, recipientName, privateMessage)
 
-			if _, err := file.WriteString(message + "\n"); err != nil {
+			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
 				continue
 			}
@@ -206,6 +201,12 @@ func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
 
 			username := parts[1]
 			database.DeleteUser(client.Conn, db, username)
+			for _, client := range cs.clients {
+				if username == client.Name {
+					client.Conn.Close()
+					return
+				}
+			}
 
 			// if client.Role == "guest" {
 			// 	client.Conn.Write([]byte("You don't have enough rights\n"))
@@ -214,14 +215,14 @@ func (cs *ChatServer) handleClient(db *sql.DB, client Client) {
 			// 	database.DeleteUser(client.Conn, db, username)
 			// }
 
-			if _, err := file.WriteString(message + "\n"); err != nil {
+			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
 				continue
 			}
 		default:
 			cs.broadcast <- fmt.Sprintf("%s %s: %s", time, client.Name, message)
 
-			if _, err := file.WriteString(message + "\n"); err != nil {
+			if _, err := file.WriteString(time + " " + client.Name + ": " + message + "\n"); err != nil {
 				fmt.Printf("Error of writing to file: %v\n", err)
 				continue
 			}
@@ -258,14 +259,21 @@ func (cs *ChatServer) privateChat(senderName, recipientName, privateMessage stri
 	}
 }
 
-func (cs *ChatServer) sendClientList(conn net.Conn) {
+func (cs *ChatServer) sendClientList(db *sql.DB, conn net.Conn, clientsList []s.Client) {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
 
 	var builder strings.Builder
-	builder.WriteString("=== Participants ===\n")
+
+	builder.WriteString("=== All participants ===\n")
+	for _, client := range clientsList {
+		builder.WriteString(fmt.Sprintf("• %s (%s)\n", client.Name, client.Role))
+	}
+	builder.WriteString(fmt.Sprintf("Total: %d\n", database.UsersCount(db)))
+
+	builder.WriteString("\n=== Active participants ===\n")
 	for _, client := range cs.clients {
-		builder.WriteString(fmt.Sprintf("• %s\n", client.Name))
+		builder.WriteString(fmt.Sprintf("• %s (%s)\n", client.Name, client.Role))
 	}
 	builder.WriteString(fmt.Sprintf("Total: %d\n", len(cs.clients)))
 
