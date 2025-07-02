@@ -24,7 +24,7 @@ type ChatServer struct {
 	mutex      sync.Mutex
 }
 
-func main() {
+func StartServer() {
 	server := ChatServer{
 		clients:    make(map[net.Conn]s.Client),
 		broadcast:  make(chan string),
@@ -52,7 +52,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("db was successfuly connected")
+	fmt.Println("Database was successfuly connected")
 	database.CreateTables(db)
 
 	go server.handleMessages()
@@ -70,6 +70,10 @@ func main() {
 		server.register <- client
 		go server.handleClient(db, client, clientsList)
 	}
+}
+
+func main() {
+	StartServer()
 }
 
 func (cs *ChatServer) handleIncomingData(conn net.Conn, db *sql.DB) s.Client {
