@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -37,5 +39,53 @@ func TestClientConnection(t *testing.T) {
 	case <-connAccepted:
 	case <-time.After(1 * time.Second):
 		t.Fatal("Timeout waiting for connection acceptance")
+	}
+}
+
+func TestClientMessageHandling(t *testing.T) {
+	ln, err := net.Listen("tcp", ":8082") // сервер
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+
+	serverMsgs := make(chan string)
+
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			t.Error(err)
+		}
+		defer conn.Close()
+
+		reader := bufio.NewReader(conn)
+		for {
+			msg, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			serverMsgs <- strings.TrimSpace(msg)
+		}
+	}()
+
+	conn, err := net.Dial("tcp", ":8082") // клиент
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	testMsg := "test msg"
+	_, err = conn.Write([]byte(testMsg + "\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case msg := <-serverMsgs:
+		if msg != testMsg {
+			t.Errorf("Expected message '%s', got '%s'", testMsg, msg)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("Timeout waiting for server to receive message")
 	}
 }
